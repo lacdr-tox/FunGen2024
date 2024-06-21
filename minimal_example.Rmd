@@ -1,0 +1,84 @@
+---
+title: "Minimal_code_example_CP1"
+author: "Testing purposes."
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Load R libraries
+
+These libraries will be used in this computer session. Note: tidyverse and DESeq2 both have a `select` function. Because we load DESeq2 after tidyverse, you will have to refer to the dplyr select function as `dplyr::select`.
+
+We also strongly advice that you clean up your environment on the right top with the broom symbol before you start today, to remove data from previous computer sessions.
+
+```{r}
+library(tidyverse)
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+if (!requireNamespace("DESeq2", quietly = TRUE))
+  BiocManager::install("DESeq2")
+library(DESeq2)
+```
+
+# Create fake dataset
+
+```{r}
+# Parameters
+num_genes <- 1000       # Number of genes
+num_samples <- 10        # Number of samples
+prob <- 0.01              # Probability for the binomial distribution
+
+# Simulating sample conditions (e.g., control vs treatment)
+conditions <- factor(rep(c("control", "treatment"), each = num_samples / 2))
+
+# Simulating count data
+set.seed(123)  # For reproducibility
+counts <- matrix(rbinom(num_genes * num_samples, size = 1000, prob = prob),
+                 nrow = num_genes, ncol = num_samples)
+counts[1:50,1:5] <- counts[1:50,1:5] + 20 # first 50 control are a bit differentially expressed
+counts[51:100,1:5] <- counts[51:100,1:5] + 50 # second 50 control are more differentially expressed
+counts[901:1000,] <- 0 # Last 100 are not expressed
+
+colnames(counts) <- paste0("Sample", 1:num_samples)
+rownames(counts) <- paste0("Gene", 1:num_genes)
+```
+
+```{r}
+counts %>%
+  data.frame() %>%
+  rownames_to_column("SYMBOL") %>%
+  pivot_longer(!SYMBOL, names_to = "sample", values_to = "count") %>% 
+  ggplot(aes(x = log2(count+1), color = sample)) +
+    geom_density() +
+    theme(legend.position = "bottom") +
+    labs(x = "log2count", y = "density", 
+         title = "Make a ggplot like the students should")
+```
+
+# Run DESeq2
+
+```{r}
+# Creating DESeq2 dataset
+col_data <- data.frame(condition = conditions)
+rownames(col_data) <- colnames(counts)
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
+
+# Running DESeq2 analysis
+dds <- DESeq(dds)
+
+# Results
+res <- results(dds)
+head(res)
+
+
+# Plotting the results
+plotMA(res, main="DESeq2", ylim=c(-2,2))
+
+# Histogram of p-values
+hist(res$pvalue, breaks=50, col="skyblue", border="slateblue", main="Histogram of p-values")
+
+```
+
+# Conclusion
+
+If nothing crashed and the plot above shows some blue dots around x = 20, y = -1.5 and triangles around x = 32, y = -2, we are good to go!
